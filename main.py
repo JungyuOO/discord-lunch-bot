@@ -18,12 +18,10 @@ def get_latest_menu_image():
     time.sleep(2)
     soup = BeautifulSoup(driver.page_source, 'html.parser')
 
-    img_url = None
-    for img in soup.select('img'):
-        src = img.get('src')
-        if src and 'kakaocdn.net' in src and (src.endswith('.jpg') or src.endswith('.png')):
-            img_url = src
-            break
+    # 최신(가장 위) 메뉴 이미지 하나만 추출!
+    first_img = soup.select_one('.item_archive_image img')
+    img_url = first_img['src'] if first_img else None
+
     driver.quit()
     return img_url
 
