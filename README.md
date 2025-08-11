@@ -1,10 +1,17 @@
-## Lunch_Menu_Bot_develop 
+# Lunch_Menu_Bot_develop
+점심 메뉴 공지 봇입니다.
+<hr>
+- 1. 명령어
+
+
+- -!점심을 입력하면 구내식당 점심 메뉴가 사진으로 추출됩니다. 
+- -!저녁을 입력하면 구내식당 저녁 메뉴가 사진으로 추출됩니다.
 
 
 
-Tech Stack
-----
+# Tech Stack
 ☁️ Hosting/SaaS(Server)
+----
 
 ![Render](https://img.shields.io/badge/Render-%46E3B7.svg?style=for-the-badge&logo=render&logoColor=white)
 
