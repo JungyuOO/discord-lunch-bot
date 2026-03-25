@@ -5,8 +5,7 @@ metadata:
     pipelinesascode.tekton.dev/max-keep-runs: "5"
     pipelinesascode.tekton.dev/on-event: "[push]"
     pipelinesascode.tekton.dev/on-target-branch: "[main]"
-    # 사용할 태스크들을 명시합니다.
-    pipelinesascode.tekton.dev/task: "[git-clone]"
+    pipelinesascode.tekton.dev/task: "[git-clone, buildah, git-cli]"
   name: build-and-push
 spec:
   params:
@@ -14,15 +13,16 @@ spec:
     value: '{{ repo_url }}'
   - name: revision
     value: '{{ revision }}'
-  # 빌드될 이미지 주소 (demo 네임스페이스 기준)
   - name: image_url
-    value: "image-registry.openshift-image-registry.svc:5000/user4/github-lunch-bot:latest"
-  #  value: "registry.ocp.test.com:5000/demo/pandas-bot:latest"
+    value: "image-registry.openshift-image-registry.svc:5000/user4/github-lunch-bot:{{ revision }}"
+  - name: gitops_repo_url
+    value: "https://github.com/JungyuOO/gitops"
   pipelineSpec:
     params:
     - name: repo_url
     - name: revision
     - name: image_url
+    - name: gitops_repo_url
     tasks:
     - name: fetch-repository
       params:
@@ -38,85 +38,70 @@ spec:
       - name: basic-auth
         workspace: basic-auth
 
-    # [새로운 빌드 태스크]
     - name: build-image
       runAfter:
       - fetch-repository
-      taskSpec:
-        params:
-        - name: IMAGE
-          type: string
-        - name: DOCKERFILE
-          type: string
-        - name: TLS_VERIFY
-          type: string
-        workspaces:
-        - name: source
-        stepTemplate:
-          securityContext:
-            runAsNonRoot: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-              - ALL
-            seccompProfile:
-              type: RuntimeDefault
-        steps:
-        - name: build-and-push
-          image: quay.io/buildah/stable:v1.39.3
-          workingDir: $(workspaces.source.path)
-          env:
-          - name: HOME
-            value: /tekton/home
-          - name: STORAGE_DRIVER
-            value: vfs
-          script: |
-            #!/usr/bin/env sh
-            set -eu
-
-            buildah --storage-driver="${STORAGE_DRIVER}" bud \
-              --tls-verify="$(params.TLS_VERIFY)" \
-              -f "$(params.DOCKERFILE)" \
-              -t "$(params.IMAGE)" \
-              .
-
-            buildah --storage-driver="${STORAGE_DRIVER}" push \
-              --tls-verify="$(params.TLS_VERIFY)" \
-              "$(params.IMAGE)" \
-              "docker://$(params.IMAGE)"
+      taskRef:
+        name: buildah
       params:
       - name: IMAGE
         value: $(params.image_url)
-      - name: DOCKERFILE
-        value: Dockerfile
-      - name: TLS_VERIFY
-        value: "false" # 내부 레지스트리 사용 시 인증 무시
+      - name: TLSVERIFY
+        value: "false"
       workspaces:
       - name: source
         workspace: source
-      # - name: dockerconfig # 도커 인증 정보가 담긴 워크스페이스
-      #   workspace: docker-config # 도커 인증 정보가 담긴 워크스페이스
+      - name: dockerconfig
+        workspace: docker-config
+
+    - name: update-gitops
+      runAfter:
+      - build-image
+      taskRef:
+        name: git-cli
+      params:
+      - name: GIT_USER_NAME
+        value: "tekton-ci"
+      - name: GIT_USER_EMAIL
+        value: "tekton@ocp.test.com"
+      - name: GIT_SCRIPT
+        value: |
+          git clone $(params.gitops_repo_url) gitops-repo
+          cd gitops-repo/overlays/dev
+
+          sed -i "s/newTag: .*/newTag: $(params.revision)/g" kustomization.yaml
+
+          git config --global user.email "tekton@ocp.test.com"
+          git config --global user.name "tekton-ci"
+          git add kustomization.yaml
+          git commit -m "chore: update image tag to $(params.revision) [skip ci]"
+          git push origin main
+      workspaces:
+      - name: source
+        workspace: source
+      - name: basic-auth
+        workspace: basic-auth
 
     workspaces:
     - name: source
     - name: basic-auth
-    # - name: docker-config # 도커 인증 정보 워크스페이스
+    - name: docker-config
 
   workspaces:
   - name: source
     volumeClaimTemplate:
       spec:
-        accessModes: [ReadWriteOnce]
+        accessModes:
+        - ReadWriteOnce
         resources:
           requests:
             storage: 1Gi
   - name: basic-auth
     secret:
       secretName: '{{ git_auth_secret }}'
-  # [추가] 아까 만든 시크릿을 docker-config 워크스페이스에 연결
-  # - name: docker-config
-  #   secret:
-  #     secretName: "my-registry-secret"
-  #     items:
-  #       - key: .dockerconfigjson   # 시크릿 안에 들어있는 실제 키 이름
-  #         path: config.json        # 컨테이너 안에서 보일 파일 이름
+  - name: docker-config
+    secret:
+      secretName: "my-registry-secret"
+      items:
+      - key: .dockerconfigjson
+        path: config.json
