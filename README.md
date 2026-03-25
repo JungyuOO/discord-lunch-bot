@@ -1,5 +1,5 @@
 # Lunch_Menu_Bot_develop
-점심 메뉴 공지 봇입니다.
+점심 메뉴 공지 봇입니다.asdasdsadsad
 <hr>
 - 1. 명령어
 
