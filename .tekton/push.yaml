@@ -6,7 +6,7 @@ metadata:
     pipelinesascode.tekton.dev/on-event: "[push]"
     pipelinesascode.tekton.dev/on-target-branch: "[main]"
     # 사용할 태스크들을 명시합니다.
-    pipelinesascode.tekton.dev/task: "[git-clone, buildah-ns]"
+    pipelinesascode.tekton.dev/task: "[git-clone]"
   name: build-and-push
 spec:
   params:
@@ -42,12 +42,52 @@ spec:
     - name: build-image
       runAfter:
       - fetch-repository
-      taskRef:
-        name: buildah-ns
+      taskSpec:
+        params:
+        - name: IMAGE
+          type: string
+        - name: DOCKERFILE
+          type: string
+        - name: TLS_VERIFY
+          type: string
+        workspaces:
+        - name: source
+        stepTemplate:
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            seccompProfile:
+              type: RuntimeDefault
+        steps:
+        - name: build-and-push
+          image: quay.io/buildah/stable:v1.39.3
+          workingDir: $(workspaces.source.path)
+          env:
+          - name: HOME
+            value: /tekton/home
+          - name: STORAGE_DRIVER
+            value: vfs
+          script: |
+            #!/usr/bin/env sh
+            set -eu
+
+            buildah --storage-driver="${STORAGE_DRIVER}" bud \
+              --tls-verify="$(params.TLS_VERIFY)" \
+              -f "$(params.DOCKERFILE)" \
+              -t "$(params.IMAGE)" \
+              .
+
+            buildah --storage-driver="${STORAGE_DRIVER}" push \
+              --tls-verify="$(params.TLS_VERIFY)" \
+              "$(params.IMAGE)" \
+              "docker://$(params.IMAGE)"
       params:
       - name: IMAGE
         value: $(params.image_url)
-      - name: CONTAINERFILE_PATH
+      - name: DOCKERFILE
         value: Dockerfile
       - name: TLS_VERIFY
         value: "false" # 내부 레지스트리 사용 시 인증 무시
