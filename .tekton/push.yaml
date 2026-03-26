@@ -97,7 +97,7 @@ spec:
         secretName: '{{ git_auth_secret }}'
     - name: docker-config
       secret:
-        secretName: "git-discord-lunch-bot-token-6cph7"
+        secretName: "my-registry-secret"
         items:
           - key: .dockerconfigjson
             path: config.json
