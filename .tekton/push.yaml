@@ -9,99 +9,95 @@ metadata:
   name: build-and-push
 spec:
   params:
-  - name: repo_url
-    value: '{{ repo_url }}'
-  - name: revision
-    value: '{{ revision }}'
-  - name: image_url
-    value: "image-registry.openshift-image-registry.svc:5000/user4/github-lunch-bot:{{ revision }}"
-  - name: gitops_repo_url
-    value: "https://github.com/JungyuOO/gitops"
+    - name: repo_url
+      value: '{{ repo_url }}'
+    - name: revision
+      value: '{{ revision }}'
+    - name: image_url
+      value: "image-registry.openshift-image-registry.svc:5000/user4/github-lunch-bot:{{ revision }}"
+    - name: gitops_repo_url
+      value: "https://github.com/JungyuOO/gitops"
   pipelineSpec:
     params:
-    - name: repo_url
-    - name: revision
-    - name: image_url
-    - name: gitops_repo_url
-    tasks:
-    - name: fetch-repository
-      params:
-      - name: url
-        value: $(params.repo_url)
+      - name: repo_url
       - name: revision
-        value: $(params.revision)
-      taskRef:
-        name: git-clone
-      workspaces:
-      - name: output
-        workspace: source
-      - name: basic-auth
-        workspace: basic-auth
+      - name: image_url
+      - name: gitops_repo_url
+    tasks:
+      - name: fetch-repository
+        params:
+          - name: url
+            value: $(params.repo_url)
+          - name: revision
+            value: $(params.revision)
+        taskRef:
+          name: git-clone
+        workspaces:
+          - name: output
+            workspace: source
+          - name: basic-auth
+            workspace: basic-auth
+      - name: build-image
+        runAfter:
+          - fetch-repository
+        taskRef:
+          name: buildah
+        params:
+          - name: IMAGE
+            value: $(params.image_url)
+          - name: TLSVERIFY
+            value: "false"
+        workspaces:
+          - name: source
+            workspace: source
+          - name: dockerconfig
+            workspace: docker-config
+      - name: update-gitops
+        runAfter:
+          - build-image
+        taskRef:
+          name: git-cli
+        params:
+          - name: GIT_USER_NAME
+            value: "tekton-ci"
+          - name: GIT_USER_EMAIL
+            value: "tekton@ocp.test.com"
+          - name: GIT_SCRIPT
+            value: |
+              git clone $(params.gitops_repo_url) gitops-repo
+              cd gitops-repo/overlays/dev
 
-    - name: build-image
-      runAfter:
-      - fetch-repository
-      taskRef:
-        name: buildah
-      params:
-      - name: IMAGE
-        value: $(params.image_url)
-      - name: TLSVERIFY
-        value: "false"
-      workspaces:
-      - name: source
-        workspace: source
-      - name: dockerconfig
-        workspace: docker-config
+              sed -i "s/newTag: .*/newTag: $(params.revision)/g" kustomization.yaml
 
-    - name: update-gitops
-      runAfter:
-      - build-image
-      taskRef:
-        name: git-cli
-      params:
-      - name: GIT_USER_NAME
-        value: "tekton-ci"
-      - name: GIT_USER_EMAIL
-        value: "tekton@ocp.test.com"
-      - name: GIT_SCRIPT
-        value: |
-          git clone $(params.gitops_repo_url) gitops-repo
-          cd gitops-repo/overlays/dev
-
-          sed -i "s/newTag: .*/newTag: $(params.revision)/g" kustomization.yaml
-
-          git config --global user.email "tekton@ocp.test.com"
-          git config --global user.name "tekton-ci"
-          git add kustomization.yaml
-          git commit -m "chore: update image tag to $(params.revision) [skip ci]"
-          git push origin main
-      workspaces:
-      - name: source
-        workspace: source
-      - name: basic-auth
-        workspace: basic-auth
-
+              git config --global user.email "tekton@ocp.test.com"
+              git config --global user.name "tekton-ci"
+              git add kustomization.yaml
+              git commit -m "chore: update image tag to $(params.revision) [skip ci]"
+              git push origin main
+        workspaces:
+          - name: source
+            workspace: source
+          - name: basic-auth
+            workspace: basic-auth
     workspaces:
-    - name: source
-    - name: basic-auth
-    - name: docker-config
-
+      - name: source
+      - name: basic-auth
+      - name: docker-config
   workspaces:
-  - name: source
-    volumeClaimTemplate:
-      spec:
-        accessModes:
-        - ReadWriteOnce
-        resources:
-          requests:
-            storage: 1Gi
-  - name: basic-auth
-    secret:
-      secretName: '{{ git_auth_secret }}'
-  - name: docker-config
-    secret:
-      secretName: "pipeline-dockercfg-t7kbq"
-      items:
-      - key: .dockerconfigjson
-        path: config.json
+    - name: source
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
+    - name: basic-auth
+      secret:
+        secretName: '{{ git_auth_secret }}'
+    - name: docker-config
+      secret:
+        secretName: "10c2da85ebd579d9"
+        items:
+          - key: .dockerconfigjson
+            path: config.json
