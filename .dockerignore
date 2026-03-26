@@ -1,0 +1,14 @@
+.git
+.tekton
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.env
+.gitignore
+README.md
+debug_kakao.html
+today_menu.jpg
+dinner_menu.jpg
+*_menu_*.jpg
