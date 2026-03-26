@@ -18,7 +18,7 @@ spec:
     - name: revision
       value: '{{ revision }}'
     - name: image_url
-      value: "image-registry.openshift-image-registry.svc:5000/user4/github-lunch-bot:{{ revision }}"
+      value: "image-registry.openshift-image-registry.svc:5000/demo/github-lunch-bot:{{ revision }}"
     - name: gitops_repo_url
       value: "https://github.com/JungyuOO/gitops"
   pipelineSpec:
